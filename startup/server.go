@@ -13,11 +13,6 @@ import (
 
 var jwtKey = []byte("secret_key")
 
-var users = map[string]string{
-	"user1": "password1",
-	"user2": "password2",
-}
-
 type Credentials struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
@@ -55,13 +50,6 @@ func LogIn(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	expectedPassword, ok := users[creds.Username]
-
-	if !ok || expectedPassword != creds.Password {
-		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
