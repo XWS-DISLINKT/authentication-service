@@ -1,9 +1,12 @@
 package startup
 
 import (
+	"authentication_service/infrastructure/services"
 	"authentication_service/startup/config"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/XWS-DISLINKT/dislinkt/common/proto/profile-service"
 	"log"
 	"net/http"
 	"time"
@@ -16,9 +19,11 @@ var jwtKey = []byte("secret_key")
 type Credentials struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
+	Id       string `json:"id"`
 }
 
 type Claims struct {
+	Id       string `json:"id"`
 	Username string `json:"username"`
 	jwt.StandardClaims
 }
@@ -36,26 +41,41 @@ func NewServer(config *config.Config) *Server {
 }
 
 func (server *Server) initHandlers() {
-	http.HandleFunc("/login", LogIn)
-	http.HandleFunc("/refresh", Refresh)
+	http.HandleFunc("/login", server.LogIn)
+	http.HandleFunc("/refresh", server.Refresh)
 }
 
 func (server *Server) Start() {
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", server.config.Port), nil))
 }
 
-func LogIn(w http.ResponseWriter, r *http.Request) {
-	var creds Credentials
+func (server *Server) LogIn(w http.ResponseWriter, r *http.Request) {
+	var credentials Credentials
 
-	err := json.NewDecoder(r.Body).Decode(&creds)
+	err := json.NewDecoder(r.Body).Decode(&credentials)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	expirationTime := time.Now().Add(1 * time.Minute)
+	expirationTime := time.Now().Add(24 * time.Hour)
+
+	profileEndpoint := fmt.Sprintf("%s:%s", server.config.ProfileHost, server.config.ProfilePort)
+	profileClient := services.NewProfileClient(profileEndpoint)
+	response, err := profileClient.GetCredentials(context.TODO(), &profile.GetCredentialsRequest{Username: credentials.Username})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if err != nil || response.Username != credentials.Username || response.Password != credentials.Password {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	claims := &Claims{
-		Username: creds.Username,
+		Id:       response.Id,
+		Username: response.Username,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
 		},
@@ -75,7 +95,7 @@ func LogIn(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func Refresh(w http.ResponseWriter, r *http.Request) {
+func (server *Server) Refresh(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("token")
 	if err != nil {
 		if err == http.ErrNoCookie {
