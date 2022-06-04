@@ -93,6 +93,14 @@ func (server *Server) LogIn(w http.ResponseWriter, r *http.Request) {
 		Value:   tokenString,
 		Expires: expirationTime,
 	})
+	res, err := json.Marshal(claims)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(res)
 }
 
 func (server *Server) Refresh(w http.ResponseWriter, r *http.Request) {
